@@ -22,6 +22,10 @@ def remove_vehicle_from_other_stations(plate, current_station):
         if station != current_station:
             stations[station] = [v for v in vehicles if v['plate'] != plate]
 
+@app.route('/')
+def home():
+    return jsonify({"status": "online", "message": "API de gestión de estaciones"})
+
 @app.route('/stations', methods=['GET'])
 def get_stations():
     """Devuelve las estaciones con sus vehículos."""
@@ -138,4 +142,4 @@ def handle_disconnect():
     print('Cliente desconectado')
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000)
+    socketio.run(app, host='0.0.0.0', port=10000)
