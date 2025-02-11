@@ -7,7 +7,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'secret!')
 socketio = SocketIO(app, 
                    cors_allowed_origins="*",
-                   async_mode='gevent') 
+                   async_mode='eventlet') 
 
 # Base de datos simulada
 stations = {
