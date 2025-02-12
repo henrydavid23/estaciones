@@ -9,6 +9,10 @@ socketio = SocketIO(app,
                    cors_allowed_origins="*",
                    async_mode='gevent') 
 
+@socketio.on('request_update', namespace='/')
+def handle_request_update():
+    emit('update', stations, broadcast=True, namespace='/')
+
 # Base de datos simulada
 stations = {
     "Estación 1": [],
