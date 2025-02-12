@@ -11,7 +11,7 @@ socketio = SocketIO(app,
 
 @socketio.on('request_update', namespace='/')
 def handle_request_update():
-    emit('update', stations, broadcast=True, namespace='/')
+    emit('update', stations, broadcast=False, namespace='/')
 
 # Base de datos simulada
 stations = {
@@ -71,14 +71,14 @@ def add_vehicle():
     stations[station].append(vehicle)
 
     # Emitir actualización en tiempo real
-    socketio.emit('update', stations, broadcast=True)
+    socketio.emit('update', stations, namespace='/')
     return jsonify(vehicle), 201
 
 @app.route('/vehicle/<station>/<plate>', methods=['PUT'])
 def update_vehicle(station, plate):
     try:
         data = request.get_json()
-        new_status = data.get('status', '').capitalize()
+        new_status = data.get('status', '').lower()
 
         if station not in stations:
             return jsonify({"error": "Estación no encontrada"}), 404
@@ -93,7 +93,7 @@ def update_vehicle(station, plate):
                 if new_status.lower() not in ["parqueado", "anotado", "mantenimiento"]:
                     vehicle['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
-                socketio.emit('update', stations, namespace='/', broadcast=True)
+                socketio.emit('update', stations, namespace='/')
                 return jsonify(vehicle), 200
         
         return jsonify({"error": "Vehículo no encontrado"}), 404
