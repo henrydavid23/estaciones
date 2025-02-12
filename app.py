@@ -76,31 +76,31 @@ def add_vehicle():
 
 @app.route('/vehicle/<station>/<plate>', methods=['PUT'])
 def update_vehicle(station, plate):
-    """Cambia el estado de un vehículo."""
-    if station not in stations:
-        return jsonify({"error": "Estación no encontrada"}), 404
+    try:
+        data = request.get_json()
+        new_status = data.get('status', '').capitalize()
 
-    for vehicle in stations[station]:
-        if vehicle['plate'] == plate:
-            # Cambiar estado en ciclo: Parqueado -> Normal -> Colado -> Anotado -> Mantenimiento
-            if vehicle['status'] == "Parqueado":
-                vehicle['status'] = "Normal"
-            elif vehicle['status'] == "Normal":
-                vehicle['status'] = "Colado"
-            elif vehicle['status'] == "Colado":
-                vehicle['status'] = "Anotado"
-            elif vehicle['status'] == "Anotado":
-                vehicle['status'] = "Mantenimiento"
-            else:
-                vehicle['status'] = "Parqueado"
+        if station not in stations:
+            return jsonify({"error": "Estación no encontrada"}), 404
 
-            vehicle['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        for vehicle in stations[station]:
+            if vehicle['plate'] == plate:          
+                valid_statuses = ["parqueado", "normal", "colado", "anotado", "mantenimiento"]
+                if new_status.lower() not in valid_statuses:
+                    return jsonify({"error": "Estado inválido"}), 400
 
-            # Emitir actualización en tiempo real
-            socketio.emit('update', stations, broadcast=True)
-            return jsonify(vehicle)
-
-    return jsonify({"error": "Vehículo no encontrado"}), 404
+                vehicle['status'] = new_status.lower()
+                if new_status.lower() not in ["parqueado", "anotado", "mantenimiento"]:
+                    vehicle['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                socketio.emit('update', stations, namespace='/', broadcast=True)
+                return jsonify(vehicle), 200
+        
+        return jsonify({"error": "Vehículo no encontrado"}), 404
+            
+    except Exception as e:
+        print(f"Error en actualización: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/transfer', methods=['POST'])
 def transfer_vehicle():
