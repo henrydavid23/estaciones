@@ -1,19 +1,11 @@
 from flask import Flask, jsonify, request
 from flask_socketio import SocketIO, emit
 from datetime import datetime
-import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'secret!')
-socketio = SocketIO(app, 
-                   cors_allowed_origins="*",
-                   async_mode='gevent') 
+app.config['SECRET_KEY'] = 'secret!'
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-@socketio.on('request_update', namespace='/')
-def handle_request_update():
-    emit('update', stations, broadcast=False, namespace='/')
-
-# Base de datos simulada
 stations = {
     "Estación 1": [],
     "Estación 2": [],
@@ -21,7 +13,6 @@ stations = {
 }
 
 def remove_vehicle_from_other_stations(plate, current_station):
-    """Elimina el vehículo de todas las estaciones excepto la actual."""
     for station, vehicles in stations.items():
         if station != current_station:
             stations[station] = [v for v in vehicles if v['plate'] != plate]
@@ -32,47 +23,39 @@ def home():
 
 @app.route('/stations', methods=['GET'])
 def get_stations():
-    """Devuelve las estaciones con sus vehículos."""
     return jsonify(stations)
 
 @app.route('/add_vehicle', methods=['POST'])
 def add_vehicle():
-    """Agrega un vehículo a una estación."""
-    data = request.get_json()
-    station = data.get('station')
-    plate = data.get('plate')
-
-    if not station or not plate:
-        return jsonify({"error": "Datos incompletos"}), 400
-
-    # Validar matrícula (1 a 60, siempre mostrar como tres dígitos)
     try:
-        plate_num = int(plate)
-        if plate_num < 1 or plate_num > 60:
-            return jsonify({"error": "La matrícula debe estar entre 1 y 60"}), 400
-        plate = f"{plate_num:03d}"  # Convertir a formato de 3 dígitos
-    except ValueError:
-        return jsonify({"error": "La matrícula debe ser un número válido"}), 400
+        data = request.get_json()
+        station = data.get('station')
+        plate = data.get('plate')
 
-    # Eliminar el vehículo de otras estaciones
-    remove_vehicle_from_other_stations(plate, station)
+        if not station or not plate:
+            return jsonify({"error": "Datos incompletos"}), 400
 
-    # Verificar si el vehículo ya está en la estación actual
-    for vehicle in stations[station]:
-        if vehicle['plate'] == plate:
-            return jsonify({"error": "El vehículo ya está registrado en esta estación"}), 400
+        if station not in stations:
+            return jsonify({"error": "Estación no válida"}), 404
 
-    # Agregar el vehículo a la estación actual con estado "Parqueado"
-    vehicle = {
-        "plate": plate,
-        "status": "Parqueado",  # Estado inicial
-        "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-    stations[station].append(vehicle)
+        remove_vehicle_from_other_stations(plate, station)
 
-    # Emitir actualización en tiempo real
-    socketio.emit('update', stations, namespace='/')
-    return jsonify(vehicle), 201
+        existing = next((v for v in stations[station] if v['plate'] == plate), None)
+        if existing:
+            return jsonify({"error": "Vehículo ya existe"}), 400
+
+        vehicle = {
+            "plate": plate,
+            "status": "parqueado",
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        stations[station].append(vehicle)
+
+        socketio.emit('update', stations, namespace='/')
+        return jsonify(vehicle), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/vehicle/<station>/<plate>', methods=['PUT'])
 def update_vehicle(station, plate):
@@ -80,70 +63,44 @@ def update_vehicle(station, plate):
         data = request.get_json()
         new_status = data.get('status', '').lower()
 
+        valid_statuses = ["parqueado", "normal", "colado", "anotado", "mantenimiento"]
+        if new_status not in valid_statuses:
+            return jsonify({"error": "Estado inválido"}), 400
+
         if station not in stations:
             return jsonify({"error": "Estación no encontrada"}), 404
 
         for vehicle in stations[station]:
-            if vehicle['plate'] == plate:          
-                valid_statuses = ["parqueado", "normal", "colado", "anotado", "mantenimiento"]
-                if new_status.lower() not in valid_statuses:
-                    return jsonify({"error": "Estado inválido"}), 400
-
-                vehicle['status'] = new_status.lower()
-                if new_status.lower() not in ["parqueado", "anotado", "mantenimiento"]:
+            if vehicle['plate'] == plate:
+                vehicle['status'] = new_status
+                if new_status not in ["parqueado", "anotado", "mantenimiento"]:
                     vehicle['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                
+
                 socketio.emit('update', stations, namespace='/')
                 return jsonify(vehicle), 200
-        
+
         return jsonify({"error": "Vehículo no encontrado"}), 404
-            
+
     except Exception as e:
-        print(f"Error en actualización: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/transfer', methods=['POST'])
-def transfer_vehicle():
-    """Transfiere un vehículo de una estación a otra (solo si no está en estado "Parqueado")."""
-    data = request.get_json()
-    origin = data.get('origin')
-    destination = data.get('destination')
-    plate = data.get('plate')
+@app.route('/reset', methods=['DELETE'])
+def reset_daily_data():
+    try:
+        for station in stations:
+            stations[station] = []
+        socketio.emit('update', stations, namespace='/')
+        return jsonify({"message": "Datos reiniciados"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    if not origin or not destination or not plate:
-        return jsonify({"error": "Datos incompletos"}), 400
-
-    if origin not in stations or destination not in stations:
-        return jsonify({"error": "Estación no válida"}), 404
-
-    # Buscar y transferir el vehículo
-    for vehicle in stations[origin]:
-        if vehicle['plate'] == plate:
-            if vehicle['status'] == "Parqueado":
-                return jsonify({"error": "El vehículo no puede transferirse porque está en estado 'Parqueado'"}), 400
-
-            # Conservar la hora del último estado
-            last_timestamp = vehicle['timestamp']
-            stations[origin].remove(vehicle)
-            vehicle['status'] = "Parqueado"  # Restaurar estado al transferir
-            vehicle['timestamp'] = last_timestamp  # Conservar la hora del último estado
-            stations[destination].append(vehicle)
-
-            # Emitir actualización en tiempo real
-            socketio.emit('update', stations, broadcast=True)
-            return jsonify(vehicle)
-
-    return jsonify({"error": "Vehículo no encontrado en la estación de origen"}), 404
-
-@socketio.on('connect')
+@socketio.on('connect', namespace='/')
 def handle_connect():
-    """Envía el estado inicial de las estaciones al conectarse un cliente."""
     emit('update', stations)
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Maneja la desconexión de un cliente."""
-    print('Cliente desconectado')
+@socketio.on('request_update', namespace='/')
+def handle_request_update():
+    emit('update', stations)
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=10000)
