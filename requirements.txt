@@ -11,3 +11,4 @@ python-socketio==5.9.0
 kivy==2.3.0
 requests==2.32.3
 websocket-client==1.7.0
+greenlet==3.0.3

@@ -97,11 +97,21 @@ def reset_daily_data():
 
 @socketio.on('connect', namespace='/')
 def handle_connect():
-    emit('update', stations)
+    try:
+        emit('update', stations, namespace='/')
+    except Exception as e:
+        print(f"Error en connect: {str(e)}")
+
 
 @socketio.on('request_update', namespace='/')
 def handle_request_update():
-    emit('update', stations)
+    try:
+        emit('update', stations, namespace='/', broadcast=True)
+    except Exception as e:
+        print(f"Error en request_update: {str(e)}")
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=10000)
+    socketio.run(app, 
+               host='0.0.0.0', 
+               port=10000,
+               allow_unsafe_werkzeug=True)
