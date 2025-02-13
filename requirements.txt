@@ -7,7 +7,7 @@ python-dotenv==0.19.2
 dnspython==2.4.2
 gevent==23.9.1
 python-engineio==4.9.0
-python-socketio==5.9.0
+python-socketio==5.0.2
 kivy==2.3.0
 requests==2.32.3
 python-socketio[client]==5.12.1
