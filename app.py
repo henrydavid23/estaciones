@@ -38,28 +38,38 @@ def add_vehicle():
             for v in s:
                 if v['plate'] == plate and v['status'] in ['parqueado', 'anotado', 'mantenimiento']:
                     return jsonify({"error": "No se puede transferir en este estado"}), 400
+                if any(v['plate'] == plate for v in stations[station]):
+                    return jsonify({"error": "Matrícula ya existe en esta estación"}), 400
 
         if not station or not plate:
             return jsonify({"error": "Datos incompletos"}), 400
 
         if station not in stations:
             return jsonify({"error": "Estación no válida"}), 404
+        
+        # Buscar vehículo existente en cualquier estación
+        existing_vehicle = None
+        for s in stations.values():
+            for v in s:
+                if v['plate'] == plate:
+                    existing_vehicle = v
+                    break
 
         remove_vehicle_from_other_stations(plate, station)
 
-        existing = next((v for v in stations[station] if v['plate'] == plate), None)
-        if existing:
-            vehicle = existing  # Mantener timestamp existente
-            vehicle['status'] = 'parqueado'  # Solo cambiar estado
-
+        if existing_vehicle:
+            # Mantener timestamp original si existe
+            vehicle = existing_vehicle
+            vehicle['status'] = 'parqueado'
         else:
+            # Crear nuevo registro
             vehicle = {
                 "plate": plate,
                 "status": "parqueado",
                 "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }
-        stations[station].append(vehicle)
+            }
 
+        stations[station].append(vehicle)
         socketio.emit('update', stations, namespace='/')
         return jsonify(vehicle), 201
 
