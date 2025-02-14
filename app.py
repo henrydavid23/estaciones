@@ -33,6 +33,12 @@ def add_vehicle():
         station = data.get('station')
         plate = data.get('plate')
 
+        # Validar si el vehículo existe en otro estado no transferible
+        for s in stations.values():
+            for v in s:
+                if v['plate'] == plate and v['status'] in ['parqueado', 'anotado', 'mantenimiento']:
+                    return jsonify({"error": "No se puede transferir en este estado"}), 400
+
         if not station or not plate:
             return jsonify({"error": "Datos incompletos"}), 400
 
@@ -43,12 +49,14 @@ def add_vehicle():
 
         existing = next((v for v in stations[station] if v['plate'] == plate), None)
         if existing:
-            return jsonify({"error": "Vehículo ya existe"}), 400
+            vehicle = existing  # Mantener timestamp existente
+            vehicle['status'] = 'parqueado'  # Solo cambiar estado
 
-        vehicle = {
-            "plate": plate,
-            "status": "parqueado",
-            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            vehicle = {
+                "plate": plate,
+                "status": "parqueado",
+                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
         stations[station].append(vehicle)
 
