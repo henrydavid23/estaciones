@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_socketio import SocketIO, emit
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -36,10 +36,11 @@ def add_vehicle():
         # Validar si el vehículo existe en otro estado no transferible
         for s in stations.values():
             for v in s:
-                if v['plate'] == plate and v['status'] in ['parqueado', 'anotado', 'mantenimiento']:
-                    return jsonify({"error": "No se puede transferir en este estado"}), 400
                 if any(v['plate'] == plate for v in stations[station]):
                     return jsonify({"error": "Matrícula ya existe en esta estación"}), 400
+                if v['plate'] == plate and v['status'] in ['parqueado', 'anotado', 'mantenimiento']:
+                    return jsonify({"error": "No se puede transferir en este estado"}), 400
+                
 
         if not station or not plate:
             return jsonify({"error": "Datos incompletos"}), 400
@@ -49,20 +50,30 @@ def add_vehicle():
         
         # Buscar vehículo existente en cualquier estación
         existing_vehicle = None
-        for s in stations.values():
-            for v in s:
+        penalty_seconds = 0
+        for s_name, s_vehicles in stations.items():
+            for v in s_vehicles:
                 if v['plate'] == plate:
                     existing_vehicle = v
+                    # Calcular penalización solo si estaba en circulación
+                    if v['status'] in ['normal', 'colado']:
+                        tiempo_transcurrido = (datetime.utcnow() - datetime.strptime(v['timestamp'], '%Y-%m-%d %H:%M:%S')).total_seconds()
+                        if tiempo_transcurrido > 300:  # 5 minutos
+                            penalty_seconds = tiempo_transcurrido - 300
                     break
-
+            
+        # Eliminar de otras estaciones
         remove_vehicle_from_other_stations(plate, station)
 
         if existing_vehicle:
-            # Mantener timestamp original si existe
-            vehicle = existing_vehicle
-            vehicle['status'] = 'parqueado'
+            # Aplicar penalización al timestamp original
+            new_time = datetime.strptime(existing_vehicle['timestamp'], '%Y-%m-%d %H:%M:%S') + timedelta(seconds=penalty_seconds)
+            vehicle = {
+                "plate": plate,
+                "status": "parqueado",
+                "timestamp": new_time.strftime('%Y-%m-%d %H:%M:%S')
+            }
         else:
-            # Crear nuevo registro
             vehicle = {
                 "plate": plate,
                 "status": "parqueado",
