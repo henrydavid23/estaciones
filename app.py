@@ -66,7 +66,7 @@ def add_vehicle():
             vehicle = {
                 "plate": plate,
                 "status": "parqueado",
-                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
             }
 
         stations[station].append(vehicle)
