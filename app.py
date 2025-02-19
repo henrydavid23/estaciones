@@ -18,9 +18,6 @@ def remove_vehicle_from_other_stations(plate, current_station):
         if station != current_station:
             stations[station] = [v for v in vehicles if v['plate'] != plate]
 
-@app.route('/')
-def home():
-    return jsonify({"status": "online", "message": "API de gestión de estaciones"})
 
 @app.route('/stations', methods=['GET'])
 def get_stations():
@@ -32,6 +29,19 @@ def add_vehicle():
         data = request.get_json()
         station = data.get('station')
         plate = data.get('plate')
+
+        # Nueva validación para matrículas negativas
+        is_negative = plate.startswith('-')
+        plate_num = plate.lstrip('-')
+        # Validar formato numérico
+        if not plate_num.isdigit():
+            return jsonify({"error": "Formato de matrícula inválido"}), 400
+            
+        plate_num = int(plate_num)
+        if not (1 <= plate_num <= 60):
+            return jsonify({"error": "Matrícula fuera de rango"}), 400
+
+        formatted_plate = f"{plate_num:03d}"
 
         # Validar si el vehículo existe en otro estado no transferible
         for s in stations.values():
@@ -53,12 +63,12 @@ def add_vehicle():
         penalty_seconds = 0
         for s_name, s_vehicles in stations.items():
             for v in s_vehicles:
-                if v['plate'] == plate:
+                if v['plate'] == formatted_plate:
                     existing_vehicle = v
-                    # Calcular penalización solo si estaba en circulación
-                    if v['status'] in ['normal', 'colado']:
+                    # Solo aplicar penalización si NO es transferencia negativa
+                    if not is_negative and v['status'] in ['normal', 'colado']:
                         tiempo_transcurrido = (datetime.utcnow() - datetime.strptime(v['timestamp'], '%Y-%m-%d %H:%M:%S')).total_seconds()
-                        if tiempo_transcurrido > 300:  # 5 minutos
+                        if tiempo_transcurrido > 300:
                             penalty_seconds = tiempo_transcurrido - 300
                     break
             
